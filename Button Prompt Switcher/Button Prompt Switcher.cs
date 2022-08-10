@@ -37,19 +37,8 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 
     private bool CanCast(On.HeroController.orig_CanCast orig, HeroController self)
     {
-	    //original conditions
-	    var canCast = !HeroControllerR.gm.isPaused && 
-	                  !HeroControllerR.cState.dashing &&
-	                  HeroControllerR.hero_state != ActorStates.no_input && 
-	                  !HeroControllerR.cState.backDashing && 
-	                  (!HeroControllerR.cState.attacking || HeroControllerR.attack_time >= HeroControllerR.ATTACK_RECOVERY_TIME) && 
-	                  !HeroControllerR.cState.recoiling && 
-	                  !HeroControllerR.cState.recoilFrozen && 
-	                  !HeroControllerR.cState.transitioning && 
-	                  !HeroControllerR.cState.hazardDeath && 
-	                  !HeroControllerR.cState.hazardRespawning 
-	                  && HeroControllerR.CanInput() 
-	                  && HeroControllerR.preventCastByDialogueEndTimer <= 0f;
+	    //get value of original conditions
+	    var canCast = orig(self);
 
 	    if (settings.NoCast)
 	    {
