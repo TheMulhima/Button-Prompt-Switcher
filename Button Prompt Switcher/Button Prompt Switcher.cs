@@ -217,7 +217,7 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array9 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "switchHidB"),
+						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, settings.SteamNintendoLayout ? "switchHidA" : "switchHidB"),
 						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4x"),
 						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "a"),
 					        };
@@ -228,7 +228,7 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array10 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "switchHidA"),
+						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, settings.SteamNintendoLayout ? "switchHidB" : "switchHidA"),
 						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4circle"),
 						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "b"),
 					        };
@@ -239,7 +239,7 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array11 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "switchHidY"),
+						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, settings.SteamNintendoLayout ? "switchHidX" : "switchHidY"),
 						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4square"),
 						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "x"),
 					        };
@@ -250,7 +250,7 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array12 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "switchHidX"),
+						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, settings.SteamNintendoLayout ? "switchHidY" : "switchHidX"),
 						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4triangle"),
 						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "y"),
 					        };

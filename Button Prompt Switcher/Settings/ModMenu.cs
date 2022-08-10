@@ -4,40 +4,50 @@ public static class ModMenu
 {
     private static Menu MenuRef;
 
+    private static GlobalSettings settings => Button_Prompt_Switcher.settings; 
+    
     public static MenuScreen CreateMenuScreen(MenuScreen modListMenu)
     {
         MenuRef = new Menu("Mod Menu", new Element[]
         {
-            new HorizontalOption(nameof(Button_Prompt_Switcher.settings.NoCast), 
-                "remove cast action from focus button/key",
-                new []{"False", "True"},
-                (i) => Button_Prompt_Switcher.settings.NoCast = i == 1,
-                () => Button_Prompt_Switcher.settings.NoCast ? 1 : 0),
-            
-            new HorizontalOption(nameof(Button_Prompt_Switcher.settings.ButtonSkinType), 
+            CreateBoolOption(nameof(settings.NoCast), 
+                "remove cast action from focus button/key"),
+
+                new HorizontalOption(nameof(settings.ButtonSkinType), 
                 "choose which button prompt type will be displayed for controllers (see readme)",
                 new[] {"Default, 1", "2", "3", "4", "5", "6"},
                 (i) =>
                 {
                     if (i == 0)
                     {
-                        Button_Prompt_Switcher.settings.ButtonSkinTypeIsUsed = false;
+                        settings.ButtonSkinTypeIsUsed = false;
                     }
                     else
                     {
-                        Button_Prompt_Switcher.settings.ButtonSkinTypeIsUsed = true;
-                        Button_Prompt_Switcher.settings.ButtonSkinType = i - 1;
+                        settings.ButtonSkinTypeIsUsed = true;
+                        settings.ButtonSkinType = i - 1;
                     }
                 },
-                () => Button_Prompt_Switcher.settings.ButtonSkinType + 1),
+                () => settings.ButtonSkinType + 1),
             
-            new HorizontalOption(nameof(Button_Prompt_Switcher.settings.EmulatedXboxOnly), 
-                "Forces game to use xbox 360 controller (see readme)", 
-                new []{"False", "True"},
-                (i) => Button_Prompt_Switcher.settings.EmulatedXboxOnly = i == 1,
-                () => Button_Prompt_Switcher.settings.EmulatedXboxOnly ? 1 : 0)
+            CreateBoolOption(nameof(settings.EmulatedXboxOnly), 
+                "Forces game to use xbox 360 controller (see readme)"),
+            
+            CreateBoolOption(nameof(settings.SteamNintendoLayout),
+                "Use Steam's nintendo controller layout")
+
+
         });
 
         return MenuRef.GetMenuScreen(modListMenu);
+    }
+
+    public static Element CreateBoolOption(string name, string desc)
+    {
+        return new HorizontalOption(name,
+            desc,
+            new[] { "False", "True" },
+            (i) => ReflectionHelper.SetField(settings, name, i == 1),
+            () => ReflectionHelper.GetField<GlobalSettings, bool>(settings, name) ? 1 : 0);
     }
 }
