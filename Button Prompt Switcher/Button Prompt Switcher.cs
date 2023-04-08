@@ -1,18 +1,16 @@
-﻿using MonoMod.RuntimeDetour;
-using UnityEngine.UI;
-using Satchel.Reflected;
+﻿using HKMirror.Hooks.ILHooks;
+using HKMirror.Reflection;
 
 namespace Button_Prompt_Switcher;
 
 public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICustomMenuMod
 {
     internal static Button_Prompt_Switcher Instance;
-
-    public static GlobalSettings settings { get; set; } = new GlobalSettings();
+    public static GlobalSettings settings { get; private set; } = new ();
     public void OnLoadGlobal(GlobalSettings s) => settings = s;
     public GlobalSettings OnSaveGlobal() => settings;
-
-    public new string GetName() => "Button Prompt Switcher";
+    
+    public Button_Prompt_Switcher() : base("Button Prompt Switcher") { }
     public override string GetVersion() => AssemblyUtils.GetAssemblyVersionHash();
 
     public override void Initialize()
@@ -22,17 +20,11 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
         On.ControllerDetect.LookForActiveController += LookForActiveController;
 
         On.HeroController.CanCast += CanCast;
+
+        ILInputManager.AttachDevice += AttachDeviceIL;
         
-        _ = new ILHook(
-	        typeof(InputManager)
-	        .GetMethod(nameof(InputManager.AttachDevice)),
-	        AttachDeviceIL);
-        
-        //there are 3 overloads and luckily the correct overload is edited by mapi so i can il hook the orig_ version
-	    _ = new ILHook(
-	        typeof(UIButtonSkins)
-		        .GetMethod("orig_GetButtonSkinFor", BindingFlags.Instance | BindingFlags.NonPublic),
-	        GetButtonSkinForIL);
+        // there are 3 overloads and luckily the correct overload is edited by mapi so i can il hook the orig_ version
+        ILUIButtonSkins.orig_GetButtonSkinFor += GetButtonSkinForIL;
     }
 
     private bool CanCast(On.HeroController.orig_CanCast orig, HeroController self)
@@ -42,7 +34,7 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 
 	    if (settings.NoCast)
 	    {
-		    canCast = canCast && !HeroControllerR.inputHandler.inputActions.cast.WasReleased;
+		    canCast = canCast && !InputHandler.Instance.inputActions.cast.WasReleased;
 	    }
 
 	    return canCast;
@@ -51,50 +43,40 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 
     private void LookForActiveController(On.ControllerDetect.orig_LookForActiveController orig, ControllerDetect self)
     {
+	    var controllerDetect = self.Reflect();
+	    
 	    if (InputHandler.Instance.gamepadState == GamepadState.DETACHED)
 	    {
-		    ReflectionHelper.CallMethod(self,"HideButtonLabels");
-		    ReflectionHelper.GetField<ControllerDetect, Image>(self, "controllerImage").sprite = self.controllerImages[0].sprite;
+		    controllerDetect.HideButtonLabels();
+		    controllerDetect.controllerImage.sprite = self.controllerImages[0].sprite;
 		    UIManager.instance.ShowCanvasGroup(self.controllerPrompt);
-		    self.remapButton.gameObject.SetActive(false);
+		    controllerDetect.remapButton.gameObject.SetActive(false);
 		    return;
 	    }
 	    if (InputHandler.Instance.activeGamepadType != GamepadType.NONE)
 	    {
-		    UIManager.instance.HideCanvasGroup(self.controllerPrompt);
-		    self.remapButton.gameObject.SetActive(true);
+		    UIManager.instance.HideCanvasGroup(controllerDetect.controllerPrompt);
+		    controllerDetect.remapButton.gameObject.SetActive(true);
 		    
 		    //added code
-		    if (settings.ButtonSkinTypeIsUsed)
+		    if (settings.ButtonSkinType >= 0)
 		    {
-			    switch (settings.ButtonSkinType)
+			    controllerDetect.ShowController(settings.ButtonSkinType switch
 			    {
-				    case 0:
-					    ReflectionHelper.CallMethod(self, "ShowController", GamepadType.SWITCH_JOYCON_DUAL);
-					    return;
-				    case 1:
-				    case 2:
-					    ReflectionHelper.CallMethod(self, "ShowController", GamepadType.PS4);
-					    return;
-				    case 3:
-					    ReflectionHelper.CallMethod(self, "ShowController", GamepadType.PS3_WIN);
-					    return;
-				    case 4:
-					    ReflectionHelper.CallMethod(self, "ShowController", GamepadType.XBOX_ONE);
-					    return;
-				    case 5:
-					    ReflectionHelper.CallMethod(self, "ShowController", GamepadType.XBOX_360);
-					    return;
-				    default:
-					    ReflectionHelper.CallMethod(self, "ShowController", InputHandler.Instance.activeGamepadType);
-					    return;
-			    }
-		    }
-		    else
-		    {
-			    ReflectionHelper.CallMethod(self, "ShowController", InputHandler.Instance.activeGamepadType);
+				    0 => GamepadType.SWITCH_JOYCON_DUAL,
+				    1 or 2 => GamepadType.PS4,
+				    3 => GamepadType.PS3_WIN,
+				    4 => GamepadType.XBOX_ONE,
+				    5 => GamepadType.XBOX_360,
+				    _ => InputHandler.Instance.activeGamepadType
+			    });
 		    }
 	    }
+	    else
+	    {
+		    controllerDetect.ShowController(InputHandler.Instance.activeGamepadType);
+	    }
+	    
     }
 
     private void GetButtonSkinForIL(ILContext il)
@@ -114,9 +96,10 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
         //take in the button skin (return value), the class instance and first argument of the function
         //and use that to add this piece of code just before the function returns
         cursor.EmitDelegate<Func<ButtonSkin,UIButtonSkins,InputControlType, ButtonSkin>>(
-	        (buttonSkin, _UIButtonSkins, inputControlType) =>
+	        (buttonSkin, _uIButtonSkins, inputControlType) =>
 	        {
-		        if (settings.ButtonSkinTypeIsUsed)
+		        var uIButtonSkins = _uIButtonSkins.Reflect();
+		        if (settings.ButtonSkinType >= 0)
 		        {
 			        int buttonSkinType = settings.ButtonSkinType;
 			        int num = (buttonSkinType != 0) ? ((buttonSkinType > 3) ? 2 : 1) : 0;
@@ -126,9 +109,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "switchHidDPadUp"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "dpadUp"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "dpadUp"),
+						        uIButtonSkins.switchHidDPadUp,
+						        uIButtonSkins.dpadUp,
+						        uIButtonSkins.dpadUp,
 					        };
 					        buttonSkin.sprite = array[num];
 					        break;
@@ -137,9 +120,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array2 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "switchHidDPadDown"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "dpadDown"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "dpadDown"),
+						        uIButtonSkins.switchHidDPadDown,
+						        uIButtonSkins.dpadDown,
+						        uIButtonSkins.dpadDown,
 					        };
 					        buttonSkin.sprite = array2[num];
 					        break;
@@ -148,9 +131,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array3 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "switchHidDPadLeft"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "dpadLeft"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "dpadLeft"),
+						        uIButtonSkins.switchHidDPadLeft,
+						        uIButtonSkins.dpadLeft,
+						        uIButtonSkins.dpadLeft,
 					        };
 					        buttonSkin.sprite = array3[num];
 					        break;
@@ -159,9 +142,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array4 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "switchHidDPadRight"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "dpadRight"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "dpadRight"),
+						        uIButtonSkins.switchHidDPadRight,
+						        uIButtonSkins.dpadRight,
+						        uIButtonSkins.dpadRight,
 					        };
 					        buttonSkin.sprite = array4[num];
 					        break;
@@ -170,10 +153,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array5 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins,
-							        "switchHidLeftTrigger"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4lt"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "lt"),
+						        uIButtonSkins.switchHidLeftTrigger,
+						        uIButtonSkins.ps4lt,
+						        uIButtonSkins.lt,
 					        };
 					        buttonSkin.sprite = array5[num];
 					        break;
@@ -182,10 +164,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array6 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins,
-							        "switchHidRightTrigger"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4rt"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "rt"),
+						        uIButtonSkins.switchHidRightTrigger,
+						        uIButtonSkins.ps4rt,
+						        uIButtonSkins.rt,
 					        };
 					        buttonSkin.sprite = array6[num];
 					        break;
@@ -194,9 +175,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array7 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "switchHidLeftBumper"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4lb"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "lb"),
+						        uIButtonSkins.switchHidLeftBumper,
+						        uIButtonSkins.ps4lb,
+						        uIButtonSkins.lb,
 					        };
 					        buttonSkin.sprite = array7[num];
 					        break;
@@ -205,10 +186,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array8 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins,
-							        "switchHidRightBumper"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4rb"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "rb"),
+						        uIButtonSkins.switchHidRightBumper,
+						        uIButtonSkins.ps4rb,
+						        uIButtonSkins.rb,
 					        };
 					        buttonSkin.sprite = array8[num];
 					        break;
@@ -217,9 +197,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array9 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, settings.SteamNintendoLayout ? "switchHidA" : "switchHidB"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4x"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "a"),
+						        settings.SteamNintendoLayout ? uIButtonSkins.switchHidA : uIButtonSkins.switchHidB,
+						        uIButtonSkins.ps4x,
+						        uIButtonSkins.a,
 					        };
 					        buttonSkin.sprite = array9[num];
 					        break;
@@ -228,9 +208,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array10 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, settings.SteamNintendoLayout ? "switchHidB" : "switchHidA"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4circle"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "b"),
+						        settings.SteamNintendoLayout ? uIButtonSkins.switchHidB : uIButtonSkins.switchHidA,
+						        uIButtonSkins.ps4circle,
+						        uIButtonSkins.b,
 					        };
 					        buttonSkin.sprite = array10[num];
 					        break;
@@ -239,9 +219,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array11 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, settings.SteamNintendoLayout ? "switchHidX" : "switchHidY"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4square"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "x"),
+						        settings.SteamNintendoLayout ? uIButtonSkins.switchHidX : uIButtonSkins.switchHidY,
+						        uIButtonSkins.ps4square,
+						        uIButtonSkins.x,
 					        };
 					        buttonSkin.sprite = array11[num];
 					        break;
@@ -250,9 +230,9 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 				        {
 					        Sprite[] array12 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, settings.SteamNintendoLayout ? "switchHidY" : "switchHidX"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "ps4triangle"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "y"),
+						        settings.SteamNintendoLayout ? uIButtonSkins.switchHidY : uIButtonSkins.switchHidX,
+						        uIButtonSkins.ps4triangle,
+						        uIButtonSkins.y,
 					        };
 					        buttonSkin.sprite = array12[num];
 					        break;
@@ -272,13 +252,12 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 						        {
 							        Sprite[] array13 = new Sprite[]
 							        {
-								        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins,
-									        "switchHidPlus"),
-								        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "options"),
-								        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "options"),
-								        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "start"),
-								        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "menu"),
-								        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "start"),
+								        uIButtonSkins.switchHidPlus,
+								        uIButtonSkins.options,
+								        uIButtonSkins.options,
+								        uIButtonSkins.start,
+								        uIButtonSkins.menu,
+								        uIButtonSkins.start,
 							        };
 							        buttonSkin.sprite = array13[buttonSkinType];
 							        return buttonSkin;
@@ -298,12 +277,12 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
 
 					        Sprite[] array14 = new Sprite[]
 					        {
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "switchHidMinus"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "touchpadButton"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "share"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "select"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "view"),
-						        ReflectionHelper.GetField<UIButtonSkins, Sprite>(_UIButtonSkins, "select"),
+						        uIButtonSkins.switchHidMinus,
+						        uIButtonSkins.touchpadButton,
+						        uIButtonSkins.share,
+						        uIButtonSkins.select,
+						        uIButtonSkins.view,
+						        uIButtonSkins.select,
 					        };
 					        buttonSkin.sprite = array14[buttonSkinType];
 					        break;
@@ -351,9 +330,8 @@ public class Button_Prompt_Switcher : Mod, IGlobalSettings<GlobalSettings>, ICus
         });
     }
 
-    public MenuScreen GetMenuScreen(MenuScreen modListMenu, ModToggleDelegates? _) =>
-        ModMenu.CreateMenuScreen(modListMenu);
+    public MenuScreen GetMenuScreen(MenuScreen modListMenu, ModToggleDelegates? _) => 
+	    ModMenu.CreateMenuScreen(modListMenu);
 
-
-    public bool ToggleButtonInsideMenu { get; }
+    public bool ToggleButtonInsideMenu => false;
 }
