@@ -3,51 +3,55 @@
 public static class ModMenu
 {
     private static Menu MenuRef;
+    private static GlobalSettings settings => Button_Prompt_Switcher.settings;
+    private static readonly List<string> Descriptions = new ()
+    {
+        "Normal controller prompts",
+        "Joy-Cons image, Nintendo prompts",
+        "DS4, PS prompts (Prompt for Inventory: Touchpad)",
+        "DS4, PS prompts (Prompt for Inventory: Share button)",
+        "DS4, PS prompts (Prompt for Inventory: Back/Select button)",
+        "Xbox One, XB prompts (Prompt for Inventory: View)",
+        "Xbox 360, XB prompts (Prompt for Inventory: Back/Select)",
+    };
 
-    private static GlobalSettings settings => Button_Prompt_Switcher.settings; 
-    
     public static MenuScreen CreateMenuScreen(MenuScreen modListMenu)
     {
-        MenuRef = new Menu("Mod Menu", new Element[]
+        MenuRef = new Menu("Button Prompt Switcher", new Element[]
         {
-            CreateBoolOption(nameof(settings.NoCast), 
-                "remove cast action from focus button/key"),
-
-                new HorizontalOption(nameof(settings.ButtonSkinType), 
-                "choose which button prompt type will be displayed for controllers (see readme)",
-                new[] {"Default, 1", "2", "3", "4", "5", "6"},
-                (i) =>
-                {
-                    if (i == 0)
-                    {
-                        settings.ButtonSkinTypeIsUsed = false;
-                    }
-                    else
-                    {
-                        settings.ButtonSkinTypeIsUsed = true;
-                        settings.ButtonSkinType = i - 1;
-                    }
-                },
-                () => settings.ButtonSkinType + 1),
+            new MenuButton("Link to explanations",
+                "If anything is unclear, please read the steam discussion that this mod is based on",
+                _ => Application.OpenURL("https://steamcommunity.com/sharedfiles/filedetails/?id=2525497719")),
             
-            CreateBoolOption(nameof(settings.EmulatedXboxOnly), 
-                "Forces game to use xbox 360 controller (see readme)"),
+            Blueprints.HorizontalBoolOption("No Cast",
+                "Remove cast action from focus button/key",
+                b => settings.NoCast = b,
+                () => settings.NoCast),
+
+            new HorizontalOption("Button Skin Type", 
+            Descriptions[settings.ButtonSkinType + 1],
+            new[] {"Default", "1", "2", "3", "4", "5", "6"},
+            (i) =>
+            {
+                settings.ButtonSkinType = i - 1;
+
+                (MenuRef.Find("ButtonPrompt") as HorizontalOption)!.Description = Descriptions[i];
+                MenuRef.Update();
+            },
+            () => settings.ButtonSkinType + 1,
+            Id: "ButtonPrompt"),
+        
+            Blueprints.HorizontalBoolOption("Emulated Xbox Only", 
+            "Forces game to use xbox 360 controller",
+            b => settings.EmulatedXboxOnly = b,
+            () => settings.EmulatedXboxOnly),
             
-            CreateBoolOption(nameof(settings.SteamNintendoLayout),
-                "Use Steam's nintendo controller layout")
-
-
+            Blueprints.HorizontalBoolOption("Steam Nintendo Layout",
+                "Use Steam's nintendo controller layout",
+                b => settings.SteamNintendoLayout = b,
+                () => settings.SteamNintendoLayout)
         });
 
         return MenuRef.GetMenuScreen(modListMenu);
-    }
-
-    public static Element CreateBoolOption(string name, string desc)
-    {
-        return new HorizontalOption(name,
-            desc,
-            new[] { "False", "True" },
-            (i) => ReflectionHelper.SetField(settings, name, i == 1),
-            () => ReflectionHelper.GetField<GlobalSettings, bool>(settings, name) ? 1 : 0);
     }
 }
